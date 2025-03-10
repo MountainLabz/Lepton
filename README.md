@@ -5,9 +5,12 @@ A micro voxel engine written in Rust with WGPU and runs on the [Geese Event Fram
 
 ## Screenshots
 
-![App Screenshot](https://github.com/MountainLabsYT/Quark/blob/main/Screenshot%202024-09-14%20120502.png)
+![Screenshot 2025-03-10 092409](https://github.com/user-attachments/assets/d1fa7fc6-ffaf-416e-ab25-80457dd91aa4)
+![Screenshot 2025-03-09 210615](https://github.com/user-attachments/assets/5935237c-3595-4d89-b756-17d5f4c93751)
+![Screenshot 2025-03-10 092133](https://github.com/user-attachments/assets/00af4719-b72a-414c-9190-90b95e7391fa)
+![Screenshot 2025-03-09 210504](https://github.com/user-attachments/assets/27f6a2a7-dde4-4677-b93e-d5648ca03dac)
+![Screenshot 2025-03-09 205724](https://github.com/user-attachments/assets/525a032c-9cc0-4168-a69c-79f2ff413f4f)
 
-![App Screenshot](https://github.com/user-attachments/assets/c019a9d6-795e-4cc2-a181-81d4e9a6526f)
 
 ## Features
 
