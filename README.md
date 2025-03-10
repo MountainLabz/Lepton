@@ -15,18 +15,17 @@ A micro voxel engine written in Rust with WGPU and runs on the [Geese Event Fram
 ## Features
 
 - Cross platform ✔
-- Voxel raytracing (coming soon)
-- More features coming soon, I promise :)
+- Voxel raytracing ✔
+- Contree chunking (WIP)
+- Voxel World Gen (WIP)
+- Fully modifyable voxel terrain (WIP)
 
-
+  
 ## Roadmap
 
 - Voxel Physics (coming soon)
 - Per-Voxel Path Traced Lighting (soonish)
-- Voxel World Gen 
 - Tutorials for the API
-- Fully modifyable voxel terrain
-- Raytraced voxels
 
 ## Documentation
 
@@ -49,16 +48,4 @@ Download the source files open the terminal and run:
 ## Support
 
 Feel free to make open an issue here on github :D
-
-
-
-## Timeline
-
-- rewrote the whole system with geese 11/1/24
-
-
-
-## Demo
-
-its under the name quark.exe
 
