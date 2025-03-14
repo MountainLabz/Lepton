@@ -50,10 +50,14 @@ use geese::{
     GeeseContext, GeeseContextHandle, GeeseSystem, event_handlers,
 };
 
+use lib::SV64tree::add_vox_to_tree;
 use lib::SV64tree::create_test_tree;
 use lib::SV64tree::create_test_tree_from_vox;
 use lib::SV64tree::Sparse64Tree;
 use lib::SV64tree::Tree64GpuManager;
+use lib::SV64tree::TreeMemoryManager;
+use lib::SV64tree::AABB;
+use noise::Perlin;
 use wgpu::core::device;
 use winit::keyboard::Key;
 //use wgpu::hal::vulkan::Buffer;
@@ -89,7 +93,8 @@ use winit::{ event_loop, event::*,
 //
 // Startup + Eventloop
 //
-
+//static vox_path: &str = "blue_shroom_hut.vox";
+static vox_path: &str = "C:\\Users\\jonfr\\Documents\\Game Dev\\MagicaVoxel-0.99.7.1-win64\\MagicaVoxel-0.99.7.1-win64\\vox\\Desert_ruin.vox";
 //main loop
 fn main() {
     println!("Size of CameraBuffer: {} bytes", std::mem::size_of::<CameraBuffer>());
@@ -1553,8 +1558,21 @@ impl GeeseSystem for WorldSystem {
         let device = &device_system.device;
         let queue = &device_system.queue;
 
-        let vox_path = "C:\\Users\\jonfr\\Documents\\Game Dev\\MagicaVoxel-0.99.7.1-win64\\MagicaVoxel-0.99.7.1-win64\\vox\\medieval_home_1.vox";
-        let contree = create_test_tree_from_vox(vox_path, 4);
+        //let vox_path = "C:\\Users\\jonfr\\Documents\\Game Dev\\MagicaVoxel-0.99.7.1-win64\\MagicaVoxel-0.99.7.1-win64\\vox\\nature//mushrooms//bright_shroom (3).vox";
+        //let contree = create_test_tree_from_vox(vox_path, 4);
+
+        // Create a Perlin noise instance.
+        let perlin = Perlin::new(1234);
+        // Define the overall volume.
+        let volume = AABB { 
+            min: vec3(0.0, 0.0, 0.0), 
+            max: vec3(64.0, 64.0, 64.0) 
+        };
+        // Create the tree and generate terrain.
+        let mut contree = Sparse64Tree::new();
+        contree.generate_terrain_sdf_noise_simd(volume, 4, perlin);
+
+        add_vox_to_tree(vox_path, 4, 120, 30, 128, &mut contree);
         let mut tree_manager = Tree64GpuManager::new(&device, &contree);
         
         println!("contree nodes: {}", contree.nodes.len());
@@ -1564,4 +1582,3 @@ impl GeeseSystem for WorldSystem {
     }
 
 }
-
