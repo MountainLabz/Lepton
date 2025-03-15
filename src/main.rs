@@ -94,7 +94,7 @@ use winit::{ event_loop, event::*,
 // Startup + Eventloop
 //
 //static vox_path: &str = "blue_shroom_hut.vox";
-static vox_path: &str = "C:\\Users\\jonfr\\Documents\\Game Dev\\MagicaVoxel-0.99.7.1-win64\\MagicaVoxel-0.99.7.1-win64\\vox\\Desert_ruin.vox";
+static vox_path: &str = "C:\\Users\\USER\\.vox";
 //main loop
 fn main() {
     println!("Size of CameraBuffer: {} bytes", std::mem::size_of::<CameraBuffer>());
