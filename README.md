@@ -33,13 +33,12 @@ A micro voxel engine written in Rust with WGPU and runs on the [Geese Event Fram
 
 
 ## Installation
-
-Download the source files open the terminal and run:
-
+I believe this project needs to be run on nightly to compile.
+After that just download the source files, then open the terminal and run:
 ```bash
   cargo run
 ```
-    
+
 ## License
 
 [MIT](https://choosealicense.com/licenses/mit/)
