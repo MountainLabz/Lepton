@@ -54,6 +54,8 @@ struct ChildNodeRef {
 struct StackState {
     node: Node64,
     node_position: vec3<f32>,
+    parent_min : vec3<f32>,
+    parent_max : vec3<f32>,
 }
 
 ///
@@ -517,7 +519,7 @@ fn copysign(x: f32, y: f32) -> f32 {
 }
 
 
-fn compute_side_dist(ray_origin: vec3<f32>, ray_direction: vec3<f32>, voxel_size: vec3<f32>) -> vec3<f32> {
+fn old_compute_side_dist(ray_origin: vec3<f32>, ray_direction: vec3<f32>, voxel_size: vec3<f32>) -> vec3<f32> {
     let voxel_pos = floor(ray_origin / voxel_size) * voxel_size; // Get the lower bound of the voxel
 
     // Compute the next boundary per axis
@@ -528,6 +530,17 @@ fn compute_side_dist(ray_origin: vec3<f32>, ray_direction: vec3<f32>, voxel_size
 
     return side_dist;
 }
+
+fn compute_side_dist(ray_origin: vec3<f32>, ray_direction: vec3<f32>, voxel_size: vec3<f32>, cell_origin: vec3<f32>) -> vec3<f32> {
+    // Align to the local grid defined by cell_origin
+    let local_pos = ray_origin - cell_origin;
+    let voxel_pos = floor(local_pos / voxel_size) * voxel_size;
+    // Compute the next boundary relative to the cell_origin
+    let next_boundary = voxel_pos + step(vec3<f32>(0.0), ray_direction) * voxel_size;
+    let side_dist = (next_boundary - local_pos) / ray_direction;
+    return side_dist;
+}
+
 
 fn true_trace(ray: Ray, tree_pos: vec3<f32>, root_size: f32) -> RayHit {
     var deepest_depth = 0;
@@ -649,436 +662,453 @@ fn true_trace(ray: Ray, tree_pos: vec3<f32>, root_size: f32) -> RayHit {
 //|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\
 
 
-fn clamp_trace(ray: Ray, tree_pos: vec3<f32>, root_size: f32) -> RayHit {
-    var deepest_depth = 0;
+// fn clamp_trace(ray: Ray, tree_pos: vec3<f32>, root_size: f32) -> RayHit {
+//     var deepest_depth = 0;
 
-    var result: RayHit;
-    result.color = vec3<f32>(0.0);
-    result.hit = false;
-    result.distance = 99999.0;
+//     var result: RayHit;
+//     result.color = vec3<f32>(0.0);
+//     result.hit = false;
+//     result.distance = 99999.0;
 
-    var root_start: vec3<f32>;
+//     var root_start: vec3<f32>;
 
-    if (is_point_in_aabb(ray.origin, tree_pos, vec3<f32>(root_size))){
-        root_start = ray.origin;
-    } else {
-        let root_intersection = ray_box_intersection(ray, tree_pos, root_size);
-        root_start = ray.origin + ray.direction * root_intersection.x;
-        let root_end = ray.origin + ray.direction * root_intersection.y;
-        if (root_intersection.y < root_intersection.x || root_intersection.y < 0.0) {
-            return result;
-        }
-        result.color = vec3<f32>(0.0);
-    }
+//     if (is_point_in_aabb(ray.origin, tree_pos, vec3<f32>(root_size))){
+//         root_start = ray.origin;
+//     } else {
+//         let root_intersection = ray_box_intersection(ray, tree_pos, root_size);
+//         root_start = ray.origin + ray.direction * root_intersection.x;
+//         let root_end = ray.origin + ray.direction * root_intersection.y;
+//         if (root_intersection.y < root_intersection.x || root_intersection.y < 0.0) {
+//             return result;
+//         }
+//         result.color = vec3<f32>(0.0);
+//     }
 
-    // init vars
-    var root_node = nodes[0];
-    var ray_position = root_start + (ray.direction * EPSILON); // the ray position in global space
-    var depth = 1;
-    var parent_size: f32 = return_scale(VOXEL_SCALE, 0);
-    var child_size: f32 = return_scale(VOXEL_SCALE, depth);
-    var current_voxel: vec3<i32> = vec3<i32>(floor((ray_position - floor_scale(ray_position, parent_size)) / child_size)); // the position in vox coords in the current node
-    var child_node: Node64;
-    var parent_node = root_node;
-    var cell_origin = floor_scale(ray_position, parent_size);
-        // stack init
-    var step = 0; // current step
-    var stack: array<Node64, MAX_STACK_SIZE>; // stack of previous nodes
-    var stack_ptr: u32 = 0u; // stack pointer
-    stack[stack_ptr] = root_node; // setting starting node to the root node
+//     // init vars
+//     var root_node = nodes[0];
+//     var ray_position = root_start + (ray.direction * EPSILON); // the ray position in global space
+//     var depth = 1;
+//     var parent_size: f32 = return_scale(VOXEL_SCALE, 0);
+//     var child_size: f32 = return_scale(VOXEL_SCALE, depth);
+//     var current_voxel: vec3<i32> = vec3<i32>(floor((ray_position - floor_scale(ray_position, parent_size)) / child_size)); // the position in vox coords in the current node
+//     var child_node: Node64;
+//     var parent_node = root_node;
+//     var cell_origin = floor_scale(ray_position, parent_size);
+//         // stack init
+//     var step = 0; // current step
+//     var stack: array<Node64, MAX_STACK_SIZE>; // stack of previous nodes
+//     var stack_ptr: u32 = 0u; // stack pointer
+//     stack[stack_ptr] = root_node; // setting starting node to the root node
 
-    // traversal loop
-    while (step < STEP_LIMIT){ // we check if we are inside our step limit
+//     // traversal loop
+//     while (step < STEP_LIMIT){ // we check if we are inside our step limit
 
-        // debug for node depth vision
-        if(depth > deepest_depth){
-            deepest_depth = depth;
-        }
+//         // debug for node depth vision
+//         if(depth > deepest_depth){
+//             deepest_depth = depth;
+//         }
 
-        if (any(ray_position < tree_pos) || any(ray_position > tree_pos + VOXEL_SCALE)){ // if we leave the root node return far
-            result.color = vec3<f32>(-0.2 * f32(deepest_depth));
-            return result;
-        }
-        //var current_voxel: vec3<i32> = vec3<i32>(floor((ray_position - floor_scale(ray_position, parent_size)) / child_size)); // the position in vox coords in the current node
-        current_voxel = vec3<i32>(floor((ray_position - cell_origin) / child_size));
+//         if (any(ray_position < tree_pos) || any(ray_position > tree_pos + VOXEL_SCALE)){ // if we leave the root node return far
+//             result.color = vec3<f32>(-0.2 * f32(deepest_depth));
+//             return result;
+//         }
+//         //var current_voxel: vec3<i32> = vec3<i32>(floor((ray_position - floor_scale(ray_position, parent_size)) / child_size)); // the position in vox coords in the current node
+//         current_voxel = vec3<i32>(floor((ray_position - cell_origin) / child_size));
         
-        let node_reference_ref = sparse_get_child_at_coord(parent_node, current_voxel);
+//         let node_reference_ref = sparse_get_child_at_coord(parent_node, current_voxel);
 
-        //     Conditions for Node Validity
-        // A child node is considered valid when all of the following conditions are met:
+//         //     Conditions for Node Validity
+//         // A child node is considered valid when all of the following conditions are met:
 
-        // The parent node is not a leaf node (checked with is_leaf(node))
-        // The requested coordinates are mapped to a valid index within the 64-tree (4×4×4 grid)
-        // The child mask at the target index is set (checked with get_child_mask(node, target_idx))
-        // The child node exists at the calculated offset in the nodes array
+//         // The parent node is not a leaf node (checked with is_leaf(node))
+//         // The requested coordinates are mapped to a valid index within the 64-tree (4×4×4 grid)
+//         // The child mask at the target index is set (checked with get_child_mask(node, target_idx))
+//         // The child node exists at the calculated offset in the nodes array
 
-        // In more detail:
+//         // In more detail:
 
-        // First, the function checks if the input node is a leaf. If it is, it returns the node with valid=false since leaf nodes don't have children.
-        // It clamps the coordinates to the range [0,3] for each axis, effectively handling the 4×4×4 grid structure.
-        // It calculates the target index in the flattened array using the formula x + (y * 4) + (z * 16).
-        // It checks if the bit at target_idx in the child mask is set. If not, returns with valid=false.
-        // If the bit is set, it:
+//         // First, the function checks if the input node is a leaf. If it is, it returns the node with valid=false since leaf nodes don't have children.
+//         // It clamps the coordinates to the range [0,3] for each axis, effectively handling the 4×4×4 grid structure.
+//         // It calculates the target index in the flattened array using the formula x + (y * 4) + (z * 16).
+//         // It checks if the bit at target_idx in the child mask is set. If not, returns with valid=false.
+//         // If the bit is set, it:
 
-        // Counts how many bits are set before this index in the child mask
-        // Gets the child pointer base index
-        // Returns the node at the calculated offset with valid=true
-        let node_reference = node_reference_ref.node;
-        if (node_reference_ref.valid == true){
+//         // Counts how many bits are set before this index in the child mask
+//         // Gets the child pointer base index
+//         // Returns the node at the calculated offset with valid=true
+//         let node_reference = node_reference_ref.node;
+//         if (node_reference_ref.valid == true){
                        
-            if (has_children(node_reference)) {
-                // decend into the node by:
-                // continuing the stack!
-                stack_ptr = stack_ptr + 1u;
-                stack[stack_ptr] = node_reference;
-                // setting the new "parent" node
-                parent_node = node_reference;
-                //increasing depth
-                depth++;
-                // setting the scales
-                parent_size = return_scale(VOXEL_SCALE, depth - 1);
-                child_size = return_scale(VOXEL_SCALE, depth);
-                cell_origin = floor_scale(ray_position, parent_size);
+//             if (has_children(node_reference)) {
+//                 // decend into the node by:
+//                 // continuing the stack!
+//                 stack_ptr = stack_ptr + 1u;
+//                 stack[stack_ptr] = node_reference;
+//                 // setting the new "parent" node
+//                 parent_node = node_reference;
+//                 //increasing depth
+//                 depth++;
+//                 // setting the scales
+//                 parent_size = return_scale(VOXEL_SCALE, depth - 1);
+//                 child_size = return_scale(VOXEL_SCALE, depth);
+//                 cell_origin = floor_scale(ray_position, parent_size);
 
-                step++;
-                continue;
-            }
+//                 step++;
+//                 continue;
+//             }
             
-            if is_leaf(node_reference) {
-                result.color = node_reference.color;    
+//             if is_leaf(node_reference) {
+//                 result.color = node_reference.color;    
                 
-                result.hit = true;
+//                 result.hit = true;
 
 
 
-                return result;
+//                 return result;
 
-            }
+//             }
 
-        } 
+//         } 
             
-            // if neither of those, then keep marching!
-            let last_pos = ray_position;
+//             // if neither of those, then keep marching!
+//             let last_pos = ray_position;
 
-            let dda_size = child_size;
-            let side_dist= compute_side_dist(ray_position, ray.direction, vec3<f32>(dda_size));
+//             let dda_size = child_size;
+//             let side_dist= compute_side_dist(ray_position, ray.direction, vec3<f32>(dda_size));
 
-            let tmax = min(min(side_dist.x, side_dist.y), side_dist.z);
+//             let tmax = min(min(side_dist.x, side_dist.y), side_dist.z);
 
-            // Compute neighbor_min using the axis that caused the exit
-            var neighbor_min = floor_scale(ray_position, dda_size);
+//             // Compute neighbor_min using the axis that caused the exit
+//             var neighbor_min = floor_scale(ray_position, dda_size);
 
-            if (tmax == side_dist.x) {
-                neighbor_min.x += sign(ray.direction.x) * dda_size;
-            }
-            if (tmax == side_dist.y) {
-                neighbor_min.y += sign(ray.direction.y) * dda_size;
-            }
-            if (tmax == side_dist.z) {
-                neighbor_min.z += sign(ray.direction.z) * dda_size;
-            }
+//             if (tmax == side_dist.x) {
+//                 neighbor_min.x += sign(ray.direction.x) * dda_size;
+//             }
+//             if (tmax == side_dist.y) {
+//                 neighbor_min.y += sign(ray.direction.y) * dda_size;
+//             }
+//             if (tmax == side_dist.z) {
+//                 neighbor_min.z += sign(ray.direction.z) * dda_size;
+//             }
 
-            // Compute neighbor_max
-            let neighbor_max = neighbor_min + vec3<f32>(dda_size);
+//             // Compute neighbor_max
+//             let neighbor_max = neighbor_min + vec3<f32>(dda_size);
 
-            // Clamp the ray position to ensure it stays within the correct voxel
+//             // Clamp the ray position to ensure it stays within the correct voxel
             
-            // ray_position = clamp(ray_position + ray.direction * tmax, neighbor_min, neighbor_max);
-            // ray_position = ray_position + (ray.direction * 1.0);
+//             // ray_position = clamp(ray_position + ray.direction * tmax, neighbor_min, neighbor_max);
+//             // ray_position = ray_position + (ray.direction * 1.0);
 
-            ray_position = last_pos + ray.direction * tmax;
-            // Then nudge just enough to ensure you're inside the next voxel:
-            ray_position = ray_position + (ray.direction * EPSILON);
+//             ray_position = last_pos + ray.direction * tmax;
+//             // Then nudge just enough to ensure you're inside the next voxel:
+//             ray_position = ray_position + (ray.direction * EPSILON);
 
-            //let distance = old_intersect_planes(ray_position, ray.direction, floor_scale(ray_position, parent_size), floor_scale(ray_position, parent_size) + parent_size);
-            //ray_position = ray_position + (ray.direction * distance);
+//             //let distance = old_intersect_planes(ray_position, ray.direction, floor_scale(ray_position, parent_size), floor_scale(ray_position, parent_size) + parent_size);
+//             //ray_position = ray_position + (ray.direction * distance);
 
             
-            // if we have exited the parent node then continue
-            if (!all(ray_position >= cell_origin) || !all(ray_position <= cell_origin + parent_size)){
-                // recend into the node by:
-                // backing up the stack
-                if (stack_ptr == 0u) {
-                    result.color = vec3<f32>(-0.1 * f32(deepest_depth));
-                    return result;
-                }
+//             // if we have exited the parent node then continue
+//             if (!all(ray_position >= cell_origin) || !all(ray_position <= cell_origin + parent_size)){
+//                 // recend into the node by:
+//                 // backing up the stack
+//                 if (stack_ptr == 0u) {
+//                     result.color = vec3<f32>(-0.1 * f32(deepest_depth));
+//                     return result;
+//                 }
 
-                stack_ptr = stack_ptr - 1u;
+//                 stack_ptr = stack_ptr - 1u;
                
-                // getting the old parent node
-                parent_node = stack[stack_ptr];
-                //decreasing depth
-                depth--;
-                // reversing the scales
-                parent_size = return_scale(VOXEL_SCALE, depth - 1);
-                child_size = return_scale(VOXEL_SCALE, depth);
-                // Also update the cell_origin for the parent.
-                cell_origin = floor_scale(ray_position, parent_size);
+//                 // getting the old parent node
+//                 parent_node = stack[stack_ptr];
+//                 //decreasing depth
+//                 depth--;
+//                 // reversing the scales
+//                 parent_size = return_scale(VOXEL_SCALE, depth - 1);
+//                 child_size = return_scale(VOXEL_SCALE, depth);
+//                 // Also update the cell_origin for the parent.
+//                 cell_origin = floor_scale(ray_position, parent_size);
 
-                step++;
-                continue;
-            }
+//                 step++;
+//                 continue;
+//             }
 
             
 
-            // // if we have exited the parent node then continue
-            // if (!all(ray_position >= floor_scale(last_pos, parent_size)) || !all(last_pos <= floor_scale(ray_position, parent_size) + parent_size)){
-            //     // recend into the node by:
-            //     // backing up the stack
-            //     stack_ptr = stack_ptr - 1u;
-            //     // getting the old parent node
-            //     parent_node = stack[stack_ptr];
-            //     //decreasing depth
-            //     depth--;
-            //     // reversing the scales
-            //     parent_size = return_scale(VOXEL_SCALE, depth - 1);
-            //     child_size = return_scale(VOXEL_SCALE, depth);
-            //     // Also update the cell_origin for the parent.
-            //     cell_origin = floor_scale(ray_position, parent_size);
+//             // // if we have exited the parent node then continue
+//             // if (!all(ray_position >= floor_scale(last_pos, parent_size)) || !all(last_pos <= floor_scale(ray_position, parent_size) + parent_size)){
+//             //     // recend into the node by:
+//             //     // backing up the stack
+//             //     stack_ptr = stack_ptr - 1u;
+//             //     // getting the old parent node
+//             //     parent_node = stack[stack_ptr];
+//             //     //decreasing depth
+//             //     depth--;
+//             //     // reversing the scales
+//             //     parent_size = return_scale(VOXEL_SCALE, depth - 1);
+//             //     child_size = return_scale(VOXEL_SCALE, depth);
+//             //     // Also update the cell_origin for the parent.
+//             //     cell_origin = floor_scale(ray_position, parent_size);
 
-            //     step++;
-            //     continue;
-            // }
+//             //     step++;
+//             //     continue;
+//             // }
             
 
-        step++;
-    }
+//         step++;
+//     }
 
-    return result;
+//     return result;
+// }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// fn clamp_trace2(ray: Ray, tree_pos: vec3<f32>, root_size: f32) -> RayHit {
+//     var deepest_depth = 0;
+
+//     var result: RayHit;
+//     result.color = vec3<f32>(0.0);
+//     result.hit = false;
+//     result.distance = 99999.0;
+
+//     var root_start: vec3<f32>;
+
+//     if (is_point_in_aabb(ray.origin, tree_pos, vec3<f32>(root_size))){
+//         root_start = ray.origin;
+//     } else {
+//         let root_intersection = ray_box_intersection(ray, tree_pos, root_size);
+//         root_start = ray.origin + ray.direction * root_intersection.x;
+//         let root_end = ray.origin + ray.direction * root_intersection.y;
+//         if (root_intersection.y < root_intersection.x || root_intersection.y < 0.0) {
+//             return result;
+//         }
+//         result.color = vec3<f32>(0.0);
+//     }
+
+//     // init vars
+//     var root_node = nodes[0];
+//     var ray_position = root_start + (ray.direction * EPSILON); // the ray position in global space
+//     var depth = 1;
+//     var parent_size: f32 = return_scale(VOXEL_SCALE, 0);
+//     var child_size: f32 = return_scale(VOXEL_SCALE, depth);
+//     var current_voxel: vec3<i32> = vec3<i32>(floor((ray_position - floor_scale(ray_position, parent_size)) / child_size)); // the position in vox coords in the current node
+//     var child_node: Node64;
+//     var parent_node = root_node;
+//     var cell_origin = floor_scale(ray_position, parent_size);
+//         // stack init
+//     var step = 0; // current step
+//     var stack: array<StackState, MAX_STACK_SIZE>; // stack of previous nodes
+//     var stack_ptr: u32 = 0u; // stack pointer
+
+//     let first_stack_state = StackState(root_node, cell_origin, cell_origin, cell_origin + parent_size);
+//     stack[stack_ptr] = first_stack_state; // setting starting node to the root node
+
+//     // traversal loop
+//     while (step < STEP_LIMIT){ // we check if we are inside our step limit
+
+//         // debug for node depth vision
+//         if(depth > deepest_depth){
+//             deepest_depth = depth;
+//         }
+
+//         if (any(ray_position < tree_pos) || any(ray_position > tree_pos + VOXEL_SCALE)){ // if we leave the root node return far
+//             result.color = vec3<f32>(-0.2 * f32(deepest_depth));
+//             return result;
+//         }
+//         //var current_voxel: vec3<i32> = vec3<i32>(floor((ray_position - floor_scale(ray_position, parent_size)) / child_size)); // the position in vox coords in the current node
+//         current_voxel = vec3<i32>(floor((ray_position - cell_origin) / child_size));
+        
+//         let node_reference_ref = sparse_get_child_at_coord(parent_node, current_voxel);
+
+//         //     Conditions for Node Validity
+//         // A child node is considered valid when all of the following conditions are met:
+
+//         // The parent node is not a leaf node (checked with is_leaf(node))
+//         // The requested coordinates are mapped to a valid index within the 64-tree (4×4×4 grid)
+//         // The child mask at the target index is set (checked with get_child_mask(node, target_idx))
+//         // The child node exists at the calculated offset in the nodes array
+
+//         // In more detail:
+
+//         // First, the function checks if the input node is a leaf. If it is, it returns the node with valid=false since leaf nodes don't have children.
+//         // It clamps the coordinates to the range [0,3] for each axis, effectively handling the 4×4×4 grid structure.
+//         // It calculates the target index in the flattened array using the formula x + (y * 4) + (z * 16).
+//         // It checks if the bit at target_idx in the child mask is set. If not, returns with valid=false.
+//         // If the bit is set, it:
+
+//         // Counts how many bits are set before this index in the child mask
+//         // Gets the child pointer base index
+//         // Returns the node at the calculated offset with valid=true
+//         let node_reference = node_reference_ref.node;
+//         if (node_reference_ref.valid == true){
+                       
+//             if (has_children(node_reference)) {
+//                 // decend into the node by:
+//                 // continuing the stack!
+//                 let child_voxel_origin = cell_origin + vec3<f32>(current_voxel) * child_size;
+//                 // setting the new "parent" node
+//                 parent_node = node_reference;
+//                 //increasing depth
+//                 depth++;
+//                 // setting the scales
+//                 parent_size = return_scale(VOXEL_SCALE, depth - 1);
+//                 child_size = return_scale(VOXEL_SCALE, depth);
+
+
+
+//                 //cell_origin = floor_scale(ray_position, parent_size);
+                
+//                 cell_origin = child_voxel_origin;
+
+
+
+
+//                 let new_stack_state = StackState(node_reference, cell_origin, cell_origin, cell_origin + parent_size);
+//                 stack_ptr = stack_ptr + 1u;
+//                 stack[stack_ptr] = new_stack_state;
+//                 step++;
+//                 continue;
+//             }
+            
+//             if is_leaf(node_reference) {
+//                 result.color = node_reference.color;    
+                
+//                 result.hit = true;
+
+
+
+//                 return result;
+
+//             }
+
+//         } 
+            
+//             // if neither of those, then keep marching!
+//             let last_pos = ray_position;
+
+//             let dda_size = child_size;
+//             let side_dist= compute_side_dist(ray_position, ray.direction, vec3<f32>(dda_size));
+
+//             let tmax = min(min(side_dist.x, side_dist.y), side_dist.z);
+
+//             // Compute neighbor_min using the axis that caused the exit
+//             var neighbor_min = floor_scale(ray_position, dda_size);
+
+//             if (tmax == side_dist.x) {
+//                 neighbor_min.x += sign(ray.direction.x) * dda_size;
+//             }
+//             if (tmax == side_dist.y) {
+//                 neighbor_min.y += sign(ray.direction.y) * dda_size;
+//             }
+//             if (tmax == side_dist.z) {
+//                 neighbor_min.z += sign(ray.direction.z) * dda_size;
+//             }
+
+//             // Compute neighbor_max
+//             let neighbor_max = neighbor_min + vec3<f32>(dda_size);
+
+//             // Clamp the ray position to ensure it stays within the correct voxel
+            
+//             // ray_position = clamp(ray_position + ray.direction * tmax, neighbor_min, neighbor_max);
+//             // ray_position = ray_position + (ray.direction * 1.0);
+
+//             ray_position = last_pos + ray.direction * tmax;
+//             // Then nudge just enough to ensure you're inside the next voxel:
+//             ray_position = ray_position + (ray.direction * EPSILON);
+
+//             //let distance = old_intersect_planes(ray_position, ray.direction, floor_scale(ray_position, parent_size), floor_scale(ray_position, parent_size) + parent_size);
+//             //ray_position = ray_position + (ray.direction * distance);
+
+            
+//             // if we have exited the parent node then continue
+//             if (!all(ray_position >= cell_origin) || !all(ray_position <= cell_origin + parent_size)){
+//                 // recend into the node by:
+//                 // backing up the stack
+//                 if (stack_ptr == 0u) {
+//                     result.color = vec3<f32>(-0.1 * f32(deepest_depth));
+//                     return result;
+//                 }
+
+//                 stack_ptr = stack_ptr - 1u;
+               
+//                 // getting the old parent node
+//                 parent_node = stack[stack_ptr].node;
+//                 //decreasing depth
+//                 depth--;
+//                 // reversing the scales
+//                 parent_size = return_scale(VOXEL_SCALE, depth - 1);
+//                 child_size = return_scale(VOXEL_SCALE, depth);
+//                 // Also update the cell_origin for the parent.
+//                 cell_origin = stack[stack_ptr].node_position;
+
+//                 step++;
+//                 continue;
+//             }
+
+            
+
+//             // if we have exited the parent node then continue
+//             // if (!all(ray_position >= floor_scale(last_pos, parent_size)) || !all(last_pos <= floor_scale(ray_position, parent_size) + parent_size)){
+//             //     // recend into the node by:
+//             //     // backing up the stack
+//             //     stack_ptr = stack_ptr - 1u;
+//             //     // getting the old parent node
+//             //     parent_node = stack[stack_ptr].node;
+//             //     //decreasing depth
+//             //     depth--;
+//             //     // reversing the scales
+//             //     parent_size = return_scale(VOXEL_SCALE, depth - 1);
+//             //     child_size = return_scale(VOXEL_SCALE, depth);
+//             //     // Also update the cell_origin for the parent.
+//             //     cell_origin = stack[stack_ptr].node_position;
+
+//             //     step++;
+//             //     continue;
+//             // }
+            
+
+//         step++;
+//     }
+
+//     return result;
+// }
+
+
+
+
+
+
+
+
+fn sRGB_EOTF(a: vec3<f32>) -> vec3<f32> {
+    return vec3<f32>(sRGB_EOTF_single(a.x), sRGB_EOTF_single(a.y), sRGB_EOTF_single(a.z));
 }
 
-
-
-
-
-
-
-
-
-
-
-fn clamp_trace2(ray: Ray, tree_pos: vec3<f32>, root_size: f32) -> RayHit {
-    var deepest_depth = 0;
-
-    var result: RayHit;
-    result.color = vec3<f32>(0.0);
-    result.hit = false;
-    result.distance = 99999.0;
-
-    var root_start: vec3<f32>;
-
-    if (is_point_in_aabb(ray.origin, tree_pos, vec3<f32>(root_size))){
-        root_start = ray.origin;
+fn sRGB_EOTF_single(a: f32) -> f32 {
+    if (a <= 0.04045) {
+        return a / 12.92;
     } else {
-        let root_intersection = ray_box_intersection(ray, tree_pos, root_size);
-        root_start = ray.origin + ray.direction * root_intersection.x;
-        let root_end = ray.origin + ray.direction * root_intersection.y;
-        if (root_intersection.y < root_intersection.x || root_intersection.y < 0.0) {
-            return result;
-        }
-        result.color = vec3<f32>(0.0);
+        return pow((a + 0.055) / 1.055, 2.4);
     }
-
-    // init vars
-    var root_node = nodes[0];
-    var ray_position = root_start + (ray.direction * EPSILON); // the ray position in global space
-    var depth = 1;
-    var parent_size: f32 = return_scale(VOXEL_SCALE, 0);
-    var child_size: f32 = return_scale(VOXEL_SCALE, depth);
-    var current_voxel: vec3<i32> = vec3<i32>(floor((ray_position - floor_scale(ray_position, parent_size)) / child_size)); // the position in vox coords in the current node
-    var child_node: Node64;
-    var parent_node = root_node;
-    var cell_origin = floor_scale(ray_position, parent_size);
-        // stack init
-    var step = 0; // current step
-    var stack: array<StackState, MAX_STACK_SIZE>; // stack of previous nodes
-    var stack_ptr: u32 = 0u; // stack pointer
-
-    let first_stack_state = StackState(root_node, cell_origin);
-    stack[stack_ptr] = first_stack_state; // setting starting node to the root node
-
-    // traversal loop
-    while (step < STEP_LIMIT){ // we check if we are inside our step limit
-
-        // debug for node depth vision
-        if(depth > deepest_depth){
-            deepest_depth = depth;
-        }
-
-        if (any(ray_position < tree_pos) || any(ray_position > tree_pos + VOXEL_SCALE)){ // if we leave the root node return far
-            result.color = vec3<f32>(-0.2 * f32(deepest_depth));
-            return result;
-        }
-        //var current_voxel: vec3<i32> = vec3<i32>(floor((ray_position - floor_scale(ray_position, parent_size)) / child_size)); // the position in vox coords in the current node
-        current_voxel = vec3<i32>(floor((ray_position - cell_origin) / child_size));
-        
-        let node_reference_ref = sparse_get_child_at_coord(parent_node, current_voxel);
-
-        //     Conditions for Node Validity
-        // A child node is considered valid when all of the following conditions are met:
-
-        // The parent node is not a leaf node (checked with is_leaf(node))
-        // The requested coordinates are mapped to a valid index within the 64-tree (4×4×4 grid)
-        // The child mask at the target index is set (checked with get_child_mask(node, target_idx))
-        // The child node exists at the calculated offset in the nodes array
-
-        // In more detail:
-
-        // First, the function checks if the input node is a leaf. If it is, it returns the node with valid=false since leaf nodes don't have children.
-        // It clamps the coordinates to the range [0,3] for each axis, effectively handling the 4×4×4 grid structure.
-        // It calculates the target index in the flattened array using the formula x + (y * 4) + (z * 16).
-        // It checks if the bit at target_idx in the child mask is set. If not, returns with valid=false.
-        // If the bit is set, it:
-
-        // Counts how many bits are set before this index in the child mask
-        // Gets the child pointer base index
-        // Returns the node at the calculated offset with valid=true
-        let node_reference = node_reference_ref.node;
-        if (node_reference_ref.valid == true){
-                       
-            if (has_children(node_reference)) {
-                // decend into the node by:
-                // continuing the stack!
-                let child_voxel_origin = cell_origin + vec3<f32>(current_voxel) * child_size;
-                // setting the new "parent" node
-                parent_node = node_reference;
-                //increasing depth
-                depth++;
-                // setting the scales
-                parent_size = return_scale(VOXEL_SCALE, depth - 1);
-                child_size = return_scale(VOXEL_SCALE, depth);
-
-
-
-                //cell_origin = floor_scale(ray_position, parent_size);
-                
-                cell_origin = child_voxel_origin;
-
-
-
-
-                let new_stack_state = StackState(node_reference, cell_origin);
-                stack_ptr = stack_ptr + 1u;
-                stack[stack_ptr] = new_stack_state;
-                step++;
-                continue;
-            }
-            
-            if is_leaf(node_reference) {
-                result.color = node_reference.color;    
-                
-                result.hit = true;
-
-
-
-                return result;
-
-            }
-
-        } 
-            
-            // if neither of those, then keep marching!
-            let last_pos = ray_position;
-
-            let dda_size = child_size;
-            let side_dist= compute_side_dist(ray_position, ray.direction, vec3<f32>(dda_size));
-
-            let tmax = min(min(side_dist.x, side_dist.y), side_dist.z);
-
-            // Compute neighbor_min using the axis that caused the exit
-            var neighbor_min = floor_scale(ray_position, dda_size);
-
-            if (tmax == side_dist.x) {
-                neighbor_min.x += sign(ray.direction.x) * dda_size;
-            }
-            if (tmax == side_dist.y) {
-                neighbor_min.y += sign(ray.direction.y) * dda_size;
-            }
-            if (tmax == side_dist.z) {
-                neighbor_min.z += sign(ray.direction.z) * dda_size;
-            }
-
-            // Compute neighbor_max
-            let neighbor_max = neighbor_min + vec3<f32>(dda_size);
-
-            // Clamp the ray position to ensure it stays within the correct voxel
-            
-            // ray_position = clamp(ray_position + ray.direction * tmax, neighbor_min, neighbor_max);
-            // ray_position = ray_position + (ray.direction * 1.0);
-
-            ray_position = last_pos + ray.direction * tmax;
-            // Then nudge just enough to ensure you're inside the next voxel:
-            ray_position = ray_position + (ray.direction * EPSILON);
-
-            //let distance = old_intersect_planes(ray_position, ray.direction, floor_scale(ray_position, parent_size), floor_scale(ray_position, parent_size) + parent_size);
-            //ray_position = ray_position + (ray.direction * distance);
-
-            
-            // if we have exited the parent node then continue
-            if (!all(ray_position >= cell_origin) || !all(ray_position <= cell_origin + parent_size)){
-                // recend into the node by:
-                // backing up the stack
-                if (stack_ptr == 0u) {
-                    result.color = vec3<f32>(-0.1 * f32(deepest_depth));
-                    return result;
-                }
-
-                stack_ptr = stack_ptr - 1u;
-               
-                // getting the old parent node
-                parent_node = stack[stack_ptr].node;
-                //decreasing depth
-                depth--;
-                // reversing the scales
-                parent_size = return_scale(VOXEL_SCALE, depth - 1);
-                child_size = return_scale(VOXEL_SCALE, depth);
-                // Also update the cell_origin for the parent.
-                cell_origin = stack[stack_ptr].node_position;
-
-                step++;
-                continue;
-            }
-
-            
-
-            // if we have exited the parent node then continue
-            // if (!all(ray_position >= floor_scale(last_pos, parent_size)) || !all(last_pos <= floor_scale(ray_position, parent_size) + parent_size)){
-            //     // recend into the node by:
-            //     // backing up the stack
-            //     stack_ptr = stack_ptr - 1u;
-            //     // getting the old parent node
-            //     parent_node = stack[stack_ptr].node;
-            //     //decreasing depth
-            //     depth--;
-            //     // reversing the scales
-            //     parent_size = return_scale(VOXEL_SCALE, depth - 1);
-            //     child_size = return_scale(VOXEL_SCALE, depth);
-            //     // Also update the cell_origin for the parent.
-            //     cell_origin = stack[stack_ptr].node_position;
-
-            //     step++;
-            //     continue;
-            // }
-            
-
-        step++;
-    }
-
-    return result;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 fn trace_tree(ray: Ray, tree_pos: vec3<f32>, root_size: f32) -> RayHit {
@@ -1100,7 +1130,7 @@ fn trace_tree(ray: Ray, tree_pos: vec3<f32>, root_size: f32) -> RayHit {
         if (root_intersection.y < root_intersection.x || root_intersection.y < 0.0) {
             return result;
         }
-        result.color = vec3<f32>(-0.2);
+        result.color = vec3<f32>(0.0);
     }
 
     var ray_position = root_start + (ray.direction * EPSILON);
@@ -1113,7 +1143,7 @@ fn trace_tree(ray: Ray, tree_pos: vec3<f32>, root_size: f32) -> RayHit {
 
     var stack: array<StackState, MAX_STACK_SIZE>;
     var stack_ptr = 0u;
-    var stack_state = StackState(nodes[0], cell_origin);
+    var stack_state = StackState(nodes[0], cell_origin, cell_origin, cell_origin + root_size);
 
 
     while (steps <= MAX_STEPS) {
@@ -1127,6 +1157,8 @@ fn trace_tree(ray: Ray, tree_pos: vec3<f32>, root_size: f32) -> RayHit {
 
         if (node_reference_ref.valid == true) {
             if (has_children(node_reference_ref.node)){
+                stack_ptr++;
+
                 let child_voxel_origin = cell_origin + vec3<f32>(current_voxel) * child_size;
                 depth++;
                 
@@ -1137,8 +1169,10 @@ fn trace_tree(ray: Ray, tree_pos: vec3<f32>, root_size: f32) -> RayHit {
 
                 stack_state.node = node_reference_ref.node;
                 stack_state.node_position = cell_origin;
+                stack_state.parent_min = cell_origin;
+                stack_state.parent_max = cell_origin + parent_size;
 
-                stack_ptr++;
+                
                 stack[stack_ptr] = stack_state;
 
                 continue;
@@ -1149,7 +1183,14 @@ fn trace_tree(ray: Ray, tree_pos: vec3<f32>, root_size: f32) -> RayHit {
         }
 
         if is_leaf(node_reference_ref.node) {
-            result.color = node_reference_ref.node.color;    
+            //let light_ray = Ray(ray_position +  vec3<f32>(0.0, child_size, 0.0), normalize(vec3<f32>(0.25, 1.0, 0.75)));
+
+            let dist = distance(ray.origin, ray_position);
+            
+            result.color = sRGB_EOTF(node_reference_ref.node.color);    
+            
+            
+            
                 
             result.hit = true;
 
@@ -1161,7 +1202,9 @@ fn trace_tree(ray: Ray, tree_pos: vec3<f32>, root_size: f32) -> RayHit {
             let last_pos = ray_position;
 
             let dda_size = child_size;
-            let side_dist= compute_side_dist(ray_position, ray.direction, vec3<f32>(dda_size));
+            //let side_dist= compute_side_dist(ray_position, ray.direction, vec3<f32>(dda_size));
+            let side_dist = compute_side_dist(ray_position, ray.direction, vec3<f32>(dda_size), cell_origin);
+
 
             let tmax = min(min(side_dist.x, side_dist.y), side_dist.z);
 
@@ -1191,11 +1234,27 @@ fn trace_tree(ray: Ray, tree_pos: vec3<f32>, root_size: f32) -> RayHit {
             ray_position = ray_position + (ray.direction * EPSILON);
 
 
-        //let distance = old_intersect_planes(ray_position, ray.direction, floor_scale(ray_position, parent_size), floor_scale(ray_position, parent_size) + parent_size);
-        //ray_position = ray_position + (ray.direction * distance) + (ray.direction * EPSILON);
+            
+            // // if we have exited the parent node then continue
+            // if (any(ray_position < stack[stack_ptr].parent_min || ray_position > stack[stack_ptr].parent_max)){
+            //     stack_ptr = stack_ptr - 1;
+
+            //     cell_origin = stack[stack_ptr].node_position;
+
+            //     depth = depth - 1;
+
+            //     child_size = return_scale(VOXEL_SCALE, depth);
+            //     parent_size = return_scale(VOXEL_SCALE, depth - 1);
+                
+            //     current_node = stack[stack_ptr].node;
+
+                
+
+            // }
 
 
-        // reset
+
+        //reset
         current_node = nodes[0];
         depth = 1;
         parent_size = root_size;
