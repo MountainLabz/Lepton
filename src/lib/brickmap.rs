@@ -75,61 +75,6 @@ impl ChunkWorld {
     }
 
 
-    // this function (created by claude Sonnet) extracts the bricks and indices into arrays.
-    // fn extract_to_arrays(&mut self) {
-    //     // First, calculate the total world dimensions in bricks
-    //     let (min_pos, max_pos) = self.get_world_bounds();
-    //     let world_size = (max_pos - min_pos + IVec3::ONE) * 16; // Convert to brick coordinates
-        
-    //     let total_bricks = (world_size.x * world_size.y * world_size.z) as usize;
-    //     let mut brick_array = vec![None; total_bricks];
-    //     let mut index_array = vec![0u32; total_bricks];
-        
-    //     // For each brickmap in the world
-    //     for (brickmap_pos, brickmap) in &self.brickmaps {
-    //         // Calculate base offset for this brickmap
-    //         let base_offset = self.calculate_brickmap_offset(brickmap_pos, min_pos);
-            
-    //         // For each potential brick position in the brickmap
-    //         for x in 0..16 {
-    //             for y in 0..16 {
-    //                 for z in 0..16 {
-    //                     let local_idx = (x * 16 * 16 + y * 16 + z) as usize;
-                        
-    //                     // If there's a brick at this position
-    //                     if let Some(brick_idx) = brickmap.indices[local_idx] {
-    //                         if let Some(brick) = brickmap.bricks.get(&brick_idx) {
-    //                             // Calculate global position
-    //                             let global_pos = IVec3::new(
-    //                                 base_offset.x + x,
-    //                                 base_offset.y + y,
-    //                                 base_offset.z + z
-    //                             );
-                                
-    //                             // Convert 3D position to flat array index
-    //                             let array_idx = self.position_to_index(global_pos, world_size);
-                                
-    //                             // Store brick and index
-    //                             brick_array[array_idx] = Some(brick.clone());
-    //                             index_array[array_idx] = brick_idx as u32;
-    //                         }
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //     }
-        
-    //     ExtractedWorld {
-    //         brick_array,
-    //         index_array,
-    //         dimensions: world_size,
-    //     }
-    // }
-    //// this function was also written by Sonnet
-    // fn position_to_index(&self, pos: IVec3, dimensions: IVec3) -> usize {
-    //     (pos.x * dimensions.y * dimensions.z + pos.y * dimensions.z + pos.z) as usize
-    // }
-
 
     pub fn collect_bricks(&mut self, world_size: usize){
         //let world_array_size = world_size * world_size * world_size;
